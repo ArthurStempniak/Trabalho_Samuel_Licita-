@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Licitações - LicitHub</title>
+    <link rel="stylesheet" href="../../css/style.css">
+    <style>
+        .filters {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .filters input, .filters select {
+            width: 100%;
+            padding: 0.8rem;
+            background-color: var(--surface-color);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="main-layout">
+        <aside class="sidebar"></aside>
+        <header class="header"></header>
+        <main class="main-content">
+            <div class="page-header">
+                <h1 id="page-title">Licitações Abertas</h1>
+            </div>
+
+            <div class="filters">
+                <input type="search" id="search-input" placeholder="Buscar por título ou descrição...">
+                <select id="orgao-select">
+                    <option value="">Todos os Órgãos</option>
+                </select>
+            </div>
+
+            <div class="helper-buttons">
+                <button class="helper-btn" onclick="alert('Funcionalidade de Alertas não implementada.')">Alertas</button>
+                <button class="helper-btn" onclick="alert('Funcionalidade de Documentos não implementada.')">Documentos</button>
+            </div>
+
+            <div id="licitacoes-list"></div>
+        </main>
+    </div>
+
+    <script src="../../js/database.js"></script>
+    <script src="../../js/auth.js"></script>
+    <script src="../../js/scripts.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            await populateOrgaoFilter();
+            await renderCards();
+
+            if (Auth.isAdm() || Auth.isPublicServer()) {
+                const currentUser = Auth.getCurrentUser();
+                document.getElementById('page-title').textContent = `Licitações de ${currentUser.orgao}`;
+            }
+
+            document.getElementById('search-input').addEventListener('input', renderCards);
+            document.getElementById('orgao-select').addEventListener('change', renderCards);
+        });
+
+        async function populateOrgaoFilter() {
+            const select = document.getElementById('orgao-select');
+            const orgaos = await DB.getAllOrgaos();
+            orgaos.forEach(item => {
+                const option = document.createElement('option');
+                option.value = item.orgao;
+                option.textContent = item.orgao;
+                select.appendChild(option);
+            });
+        }
+
+        async function renderCards() {
+            const listContainer = document.getElementById('licitacoes-list');
+            const currentUser = Auth.getCurrentUser();
+            listContainer.innerHTML = '<p>Carregando licitações...</p>';
+            
+            const filters = {
+                searchTerm: document.getElementById('search-input').value,
+                orgao: document.getElementById('orgao-select').value
+            };
+
+            const licitacoes = await DB.getLicitacoes(currentUser, filters);
+            listContainer.innerHTML = '';
+
+            if (licitacoes.length === 0) {
+                listContainer.innerHTML = '<p>Nenhuma licitação encontrada com os filtros aplicados.</p>';
+                return;
+            }
+
+            licitacoes.forEach(lic => {
+                const card = document.createElement('div');
+                card.className = 'licitacao-card';
+
+                let statusTexto = '';
+                const dataEncerramento = new Date(lic.data_encerramento);
+                const hoje = new Date();
+                hoje.setHours(0, 0, 0, 0);
+                
+                const diffTime = dataEncerramento - hoje;
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                if (lic.situacao === 'Encerrada' || diffDays < 0) {
+                    statusTexto = 'Encerrada';
+                } else if (diffDays === 0) {
+                    statusTexto = 'Vence hoje';
+                } else {
+                    statusTexto = `Vence em ${diffDays} dias`;
+                }
+                
+                const valorFormatado = parseFloat(lic.valor_estimado).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+                
+                const orgaoHtml = Auth.isStandardUser() ? `<p>${lic.orgao}</p>` : '';
+
+                card.innerHTML = `
+                    <div class="card-header">
+                        <h2>${lic.titulo}</h2>
+                        <span>${statusTexto}</span>
+                    </div>
+                    <div class="card-body">
+                        ${orgaoHtml}
+                    </div>
+                    <div class="card-footer">
+                        <span class="valor">${valorFormatado}</span>
+                        <a href="detalhes.html?id=${lic.id}">Ver detalhes</a>
+                    </div>
+                `;
+                listContainer.appendChild(card);
+            });
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Usuários - Licita+</title>
+    <link rel="stylesheet" href="../../css/style.css">
+</head>
+<body>
+    <div class="main-layout">
+        <aside class="sidebar"></aside>
+        <header class="header"></header>
+        <main class="main-content">
+            <div class="page-header">
+                <h1>Usuários</h1>
+                <a href="form-usuarios.html" class="btn btn-primary">Novo Usuário</a>
+            </div>
+
+            <div class="card">
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Nome</th>
+                                <th>E-mail</th>
+                                <th>Cargo</th>
+                                <th>Perfil</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="users-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="../../js/database.js"></script>
+    <script src="../../js/auth.js"></script>
+    <script src="../../js/scripts.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            if (!Auth.isAdmin()) {
+                alert('Acesso negado. Apenas administradores podem gerenciar usuários.');
+                window.location.href = '../dashboard.html';
+                return;
+            }
+            
+            renderTable();
+
+            document.getElementById('users-table-body').addEventListener('click', async (event) => {
+                if (event.target.classList.contains('btn-delete')) {
+                    const userId = event.target.getAttribute('data-id');
+                    const currentUser = Auth.getCurrentUser();
+                    if (parseInt(userId) === currentUser.id) {
+                        alert('Você não pode excluir seu próprio usuário.');
+                        return;
+                    }
+                    if (confirm('Tem certeza que deseja excluir este usuário?')) {
+                        await DB.deleteUser(userId);
+                        displayToast('Usuário excluído com sucesso!', 'success');
+                        renderTable();
+                    }
+                }
+            });
+        });
+
+        async function renderTable() {
+            const users = await DB.getUsers();
+            const tableBody = document.getElementById('users-table-body');
+            tableBody.innerHTML = '';
+            users.forEach(user => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${user.nome}</td>
+                    <td>${user.email}</td>
+                    <td>${user.cargo || 'Não informado'}</td>
+                    <td>${user.perfil}</td>
+                    <td class="actions">
+                        <a href="form-usuarios.html?id=${user.id}" class="btn btn-secondary">Editar</a>
+                        <button class="btn btn-danger btn-delete" data-id="${user.id}">Excluir</button>
+                    </td>
+                `;
+                tableBody.appendChild(tr);
+            });
+        }
+    </script>
+</body>
+</html>

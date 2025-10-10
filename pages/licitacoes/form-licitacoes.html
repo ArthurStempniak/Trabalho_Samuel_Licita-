@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cadastro de Licitação - Licita+</title>
+    <link rel="stylesheet" href="../../css/style.css">
+</head>
+
+<body>
+    <div class="main-layout">
+        <aside class="sidebar"></aside>
+        <header class="header"></header>
+        <main class="main-content">
+            <div class="page-header">
+                <h1 id="page-title">Nova Licitação</h1>
+                <p class="page-subtitle">Preencha as informações abaixo para cadastrar um novo edital.</p>
+            </div>
+
+            <div class="card">
+                <form id="licitacao-form">
+                    <input type="hidden" id="licitacaoId">
+
+                    <h2 class="form-section-title">Informações Principais</h2>
+                    <div class="form-grid">
+                        <div class="form-group" style="grid-column: 1 / -1;">
+                            <label for="titulo">Título da Licitação</label>
+                            <input type="text" id="titulo" required
+                                placeholder="Ex: Contratação de serviços de limpeza...">
+                        </div>
+                        <div class="form-group" style="grid-column: 1 / 3;">
+                            <label for="orgao">Órgão Responsável</label>
+                            <input type="text" id="orgao" required placeholder="Ex: Prefeitura Municipal de...">
+                        </div>
+                        <div class="form-group">
+                            <label for="valor_estimado">Valor Estimado (R$)</label>
+                            <input type="number" id="valor_estimado" step="0.01" required placeholder="Ex: 150000.00">
+                        </div>
+                    </div>
+
+                    <h2 class="form-section-title">Datas e Prazos</h2>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="data_abertura">Data de Abertura</label>
+                            <input type="date" id="data_abertura" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="data_encerramento">Data de Encerramento</label>
+                            <input type="date" id="data_encerramento" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="situacao">Situação</label>
+                            <select id="situacao" required>
+                                <option value="Aberta">Aberta</option>
+                                <option value="Em andamento">Em andamento</option>
+                                <option value="Encerrada">Encerrada</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <h2 class="form-section-title">Detalhes e Requisitos</h2>
+                    <div class="form-grid">
+                        <div class="form-group" style="grid-column: 1 / -1;">
+                            <label for="descricao">Descrição Detalhada</label>
+                            <textarea id="descricao" rows="6"></textarea>
+                        </div>
+                        <div class="form-group" style="grid-column: 1 / -1;">
+                            <label for="requisitos_tecnicos">Requisitos de Qualificação Técnica</label>
+                            <textarea id="requisitos_tecnicos" rows="4"></textarea>
+                            <small>Separe os diferentes requisitos com ponto e vírgula (;).</small>
+                        </div>
+                        <div class="form-group" style="grid-column: 1 / -1;">
+                            <label for="requisitos_economicos">Requisitos de Qualificação Econômica</label>
+                            <textarea id="requisitos_economicos" rows="4"></textarea>
+                            <small>Separe os diferentes requisitos com ponto e vírgula (;).</small>
+                        </div>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary">Salvar</button>
+                        <a href="listagem-licitacoes.html" class="btn btn-secondary">Voltar</a>
+                    </div>
+                </form>
+            </div>
+        </main>
+    </div>
+
+    <script src="../../js/database.js"></script>
+    <script src="../../js/auth.js"></script>
+    <script src="../../js/scripts.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            const licitacaoId = getUrlParam('id');
+            const form = document.getElementById('licitacao-form');
+            const pageTitle = document.getElementById('page-title');
+
+            const currentUser = Auth.getCurrentUser();
+            const orgaoInput = document.getElementById('orgao');
+
+            if (currentUser && (Auth.isAdm() || Auth.isPublicServer())) {
+                orgaoInput.value = currentUser.orgao;
+                orgaoInput.readOnly = true;
+                orgaoInput.style.backgroundColor = '#2c2c2c';
+                orgaoInput.style.cursor = 'not-allowed';
+            }
+
+            if (licitacaoId) {
+                pageTitle.textContent = 'Editar Licitação';
+                document.querySelector('.page-subtitle').textContent = 'Altere as informações necessárias e salve o edital.';
+
+                const licitacao = await DB.getLicitacaoById(licitacaoId);
+                if (licitacao) {
+                    const formatDateForInput = (dateString) => dateString ? dateString.split('T')[0] : '';
+
+                    document.getElementById('licitacaoId').value = licitacao.id;
+                    document.getElementById('titulo').value = licitacao.titulo;
+                    document.getElementById('valor_estimado').value = licitacao.valor_estimado;
+                    document.getElementById('data_abertura').value = formatDateForInput(licitacao.data_abertura);
+                    document.getElementById('data_encerramento').value = formatDateForInput(licitacao.data_encerramento);
+                    document.getElementById('situacao').value = licitacao.situacao;
+                    document.getElementById('descricao').value = licitacao.descricao;
+                    document.getElementById('requisitos_tecnicos').value = licitacao.requisitos_tecnicos;
+                    document.getElementById('requisitos_economicos').value = licitacao.requisitos_economicos;
+                }
+            }
+
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+
+                if (!currentUser) {
+                    alert('Sessão expirada. Faça login novamente.');
+                    return;
+                }
+
+                const licitacaoData = {
+                    id: document.getElementById('licitacaoId').value ? parseInt(document.getElementById('licitacaoId').value) : null,
+                    titulo: document.getElementById('titulo').value,
+                    orgao: document.getElementById('orgao').value,
+                    valor_estimado: document.getElementById('valor_estimado').value,
+                    data_abertura: document.getElementById('data_abertura').value,
+                    data_encerramento: document.getElementById('data_encerramento').value,
+                    situacao: document.getElementById('situacao').value,
+                    descricao: document.getElementById('descricao').value,
+                    requisitos_tecnicos: document.getElementById('requisitos_tecnicos').value,
+                    requisitos_economicos: document.getElementById('requisitos_economicos').value,
+                    criado_por: currentUser.id
+                };
+
+                try {
+                    if (licitacaoData.id) {
+                        await DB.updateLicitacao(licitacaoData);
+                        sessionStorage.setItem('successMessage', 'Licitação atualizada com sucesso!');
+                    } else {
+                        await DB.addLicitacao(licitacaoData);
+                        sessionStorage.setItem('successMessage', 'Licitação cadastrada com sucesso!');
+                    }
+                    window.location.href = 'listagem-licitacoes.html';
+                } catch (error) {
+                    alert('Ocorreu um erro ao salvar a licitação: ' + error.message);
+                }
+            });
+        });
+    </script>
+</body>
+
+</html>

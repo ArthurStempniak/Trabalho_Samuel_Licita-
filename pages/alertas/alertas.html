@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meus Alertas - LicitHub</title>
+    <link rel="stylesheet" href="../../css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        .alert-list {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        .alert-item {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+            background-color: var(--surface-color);
+            padding: 1.5rem;
+            border-radius: 12px;
+            border-left: 5px solid var(--border-color);
+            transition: background-color 0.2s;
+        }
+        .alert-item.unread {
+            background-color: #2a2a2a; /* Um pouco mais claro para destacar */
+        }
+        .alert-item:hover {
+            background-color: #333;
+        }
+        .alert-icon {
+            font-size: 1.5rem;
+        }
+        .alert-icon.Info { color: #3b82f6; }
+        .alert-icon.Sucesso { color: #22c55e; }
+        .alert-icon.Aviso { color: #f97316; }
+        .alert-content {
+            flex-grow: 1;
+        }
+        .alert-content a {
+            text-decoration: none;
+            color: var(--text-primary);
+        }
+        .alert-content p {
+            margin: 0;
+            line-height: 1.5;
+        }
+        .alert-content small {
+            color: var(--text-secondary);
+        }
+    </style>
+</head>
+<body>
+    <div class="main-layout">
+        <aside class="sidebar"></aside>
+        <header class="header"></header>
+        <main class="main-content">
+            <div class="page-header">
+                <h1>Meus Alertas</h1>
+            </div>
+
+            <div class="card">
+                <div id="alertas-list" class="alert-list">
+                    </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="../../js/database.js"></script>
+    <script src="../../js/auth.js"></script>
+    <script src="../../js/scripts.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            const currentUser = Auth.getCurrentUser();
+            if (!currentUser) return;
+
+            renderAlertas(currentUser.id);
+        });
+
+        async function renderAlertas(userId) {
+            const listContainer = document.getElementById('alertas-list');
+            listContainer.innerHTML = '<p>Carregando alertas...</p>';
+
+            const alertas = await DB.getAlertas(userId);
+
+            if (alertas.length === 0) {
+                listContainer.innerHTML = '<p>Você não tem nenhum alerta no momento.</p>';
+                return;
+            }
+
+            listContainer.innerHTML = ''; // Limpa a mensagem de "carregando"
+            alertas.forEach(alerta => {
+                const item = document.createElement('div');
+                item.className = `alert-item ${!alerta.lido ? 'unread' : ''}`;
+                
+                let iconClass = 'fa-solid fa-circle-info';
+                if (alerta.tipo === 'Sucesso') iconClass = 'fa-solid fa-circle-check';
+                if (alerta.tipo === 'Aviso') iconClass = 'fa-solid fa-triangle-exclamation';
+
+                const dataFormatada = new Date(alerta.data_criacao).toLocaleString('pt-BR');
+
+                item.innerHTML = `
+                    <div class="alert-icon ${alerta.tipo}">
+                        <i class="${iconClass}"></i>
+                    </div>
+                    <div class="alert-content">
+                        <a href="../licitacoes/detalhes.html?id=${alerta.id_licitacao}" data-alert-id="${alerta.id}">
+                            <p>${alerta.mensagem}</p>
+                            <small>${dataFormatada}</small>
+                        </a>
+                    </div>
+                `;
+                listContainer.appendChild(item);
+            });
+            
+            // Adiciona evento para marcar como lido ao clicar
+            listContainer.addEventListener('click', async (e) => {
+                const link = e.target.closest('a');
+                if (link) {
+                    const alertId = link.dataset.alertId;
+                    await DB.marcarAlertaComoLido(alertId);
+                }
+            });
+        }
+    </script>
+</body>
+</html>

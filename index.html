@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - LicitHub</title>
+    <link rel="stylesheet" href="css/login.css">
+</head>
+
+<body>
+    <div class="login-container">
+        <div class="login-box">
+            <div class="logo-container">
+                <h1>LicitHub</h1>
+            </div>
+            <form id="login-form">
+                <div class="input-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" placeholder="Insira seu email" value="admin@licitaplus.com" required>
+                </div>
+                <div class="input-group">
+                    <label for="password">Senha</label>
+                    <input type="password" id="password" placeholder="Insira sua senha" value="admin123" required>
+                </div>
+                <button type="submit" class="btn-login">Entrar</button>
+            </form>
+            <div id="error-message" class="error-message"></div>
+            <p class="footer-text">Não tem uma conta? <a href="register.html">Cadastre-se</a></p>
+        </div>
+    </div>
+
+    <script src="js/database.js"></script>
+    <script src="js/auth.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- LÓGICA DE LOGIN E LOGOUT ATUALIZADA ---
+            const urlParams = new URLSearchParams(window.location.search);
+            const action = urlParams.get('action');
+
+            if (action === 'logout') {
+                Auth.clearSession();
+                window.history.replaceState({}, document.title, window.location.pathname);
+            }
+            if (Auth.isUserLoggedIn()) {
+                window.location.href = 'pages/licitacoes/listagem-licitacoes.html';
+            }
+
+            document.getElementById('login-form').addEventListener('submit', async function (e) {
+                e.preventDefault();
+                const email = document.getElementById('email').value;
+                const password = document.getElementById('password').value;
+                const errorMessage = document.getElementById('error-message');
+                const loginButton = e.target.querySelector('button');
+
+                loginButton.textContent = 'Verificando...';
+                loginButton.disabled = true;
+
+                if (await Auth.login(email, password)) {
+                    window.location.href = 'pages/licitacoes/listagem-licitacoes.html';
+                } else {
+                    errorMessage.textContent = 'E-mail ou senha inválidos.';
+                    errorMessage.style.display = 'block';
+                    loginButton.textContent = 'Entrar';
+                    loginButton.disabled = false;
+                }
+            });
+        });
+    </script>
+</body>
+
+</html>

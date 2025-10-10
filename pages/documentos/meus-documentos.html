@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meus Documentos - LicitHub</title>
+    <link rel="stylesheet" href="../../css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+<body>
+    <div class="main-layout">
+        <aside class="sidebar"></aside>
+        <header class="header"></header>
+        <main class="main-content">
+            <div class="page-header">
+                <h1>Meus Documentos Favoritos</h1>
+            </div>
+            <div class="card">
+                <div id="documentos-list">
+                    </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="../../js/database.js"></script>
+    <script src="../../js/auth.js"></script>
+    <script src="../../js/scripts.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            const currentUser = Auth.getCurrentUser();
+            if (!currentUser) return;
+            renderDocumentos(currentUser.id);
+        });
+
+        async function renderDocumentos(userId) {
+            const listContainer = document.getElementById('documentos-list');
+            listContainer.innerHTML = '<p>Carregando seus documentos...</p>';
+            const documentos = await DB.getMeusDocumentos(userId);
+
+            if (documentos.length === 0) {
+                listContainer.innerHTML = '<p>Você ainda não favoritou nenhum documento. Para favoritar, clique na estrela ao lado de um documento na página de detalhes da licitação.</p>';
+                return;
+            }
+
+            listContainer.innerHTML = '';
+            documentos.forEach(doc => {
+                const item = document.createElement('div');
+                // Reutilizando a classe de 'detalhes.html' para manter o estilo
+                item.className = 'document-item'; 
+                item.innerHTML = `
+                    <span>
+                        <i class="fas fa-file-pdf" style="margin-right: 10px; color: var(--primary-accent);"></i>
+                        ${doc.nome_arquivo} <small style="color:var(--text-secondary); margin-left: 10px;">(Licitação: ${doc.titulo_licitacao})</small>
+                    </span>
+                    <a href="${doc.caminho_arquivo}" download class="download-btn" style="color: var(--text-secondary);"><i class="fas fa-download"></i></a>
+                `;
+                listContainer.appendChild(item);
+            });
+        }
+    </script>
+</body>
+</html>

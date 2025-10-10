@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Detalhes da Licitação - LicitHub</title>
+    <link rel="stylesheet" href="../../css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0, 0, 0, 0.6);
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background-color: var(--surface-color);
+            margin: auto;
+            padding: 2rem;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            max-width: 500px;
+            width: 90%;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .close-btn {
+            color: var(--text-secondary);
+            font-size: 1.8rem;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .proposta-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+
+        .proposta-table th,
+        .proposta-table td {
+            padding: 0.8rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .btn-icon {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 1.2rem;
+        }
+
+        .btn-icon:hover {
+            color: var(--primary-accent);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="main-layout">
+        <aside class="sidebar"></aside>
+        <header class="header"></header>
+        <main class="main-content">
+            <div id="details-container"></div>
+        </main>
+    </div>
+
+    <div id="proposal-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Enviar Proposta</h2>
+                <span class="close-btn">&times;</span>
+            </div>
+            <form id="proposal-form">
+                <div class="form-group" style="margin-bottom: 1rem;">
+                    <label for="valor_proposta">Valor da Proposta (R$)</label>
+                    <input type="number" id="valor_proposta" step="0.01" required
+                        style="width: 100%; padding: 0.8rem; background-color: var(--background-dark); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 8px;">
+                </div>
+                <div class="form-group" style="margin-bottom: 1.5rem;">
+                    <label for="documento_proposta">Anexar Documento</label>
+                    <input type="file" id="documento_proposta" style="width: 100%;">
+                </div>
+                <button type="submit" class="btn btn-primary" style="width: 100%;">Enviar Proposta</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="../../js/database.js"></script>
+    <script src="../../js/auth.js"></script>
+    <script src="../../js/scripts.js"></script>
+    <script>
+        let currentLicitacao = null;
+        let currentUserParticipation = null;
+        let currentUser = null;
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            const licitacaoId = getUrlParam('id');
+            if (!licitacaoId) {
+                document.getElementById('details-container').innerHTML = '<h1>Licitação não encontrada.</h1>';
+                return;
+            }
+
+            currentUser = Auth.getCurrentUser();
+            currentLicitacao = await DB.getLicitacaoById(licitacaoId);
+
+            if (!currentLicitacao) {
+                document.getElementById('details-container').innerHTML = '<h1>Licitação não encontrada.</h1>';
+                return;
+            }
+
+            if (Auth.isStandardUser()) {
+                currentUserParticipation = await DB.verificarParticipacao(licitacaoId, currentUser.id);
+            }
+
+            renderDetailsPage();
+            setupModal();
+        });
+
+        function renderDetailsPage() {
+            const container = document.getElementById('details-container');
+            const lic = currentLicitacao;
+
+            const valorFormatado = parseFloat(lic.valor_estimado).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+            const dataAbertura = new Date(lic.data_abertura).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+            const dataEncerramento = new Date(lic.data_encerramento).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+
+            let actionButtonHtml = '';
+            if (Auth.isStandardUser()) {
+                if (currentUserParticipation) {
+                    actionButtonHtml = `<button class="btn btn-secondary" style="width: 100%; margin-top: 1rem;" disabled>Você já está participando</button>`;
+                } else {
+                    actionButtonHtml = `<button id="participate-btn" class="btn btn-primary" style="width: 100%; margin-top: 1rem;">Participar desta Licitação</button>`;
+                }
+            } else if (currentUser.orgao === lic.orgao) {
+                actionButtonHtml = `<a href="form-licitacoes.html?id=${lic.id}" class="btn btn-primary" style="width: 100%; margin-top: 1rem;">Editar Licitação</a>`;
+            }
+
+            const adminTabs = (Auth.isAdm() || Auth.isPublicServer()) && currentUser.orgao === lic.orgao ?
+                `<span id="tab-propostas" class="tab-link" onclick="showTab('propostas')">Propostas Recebidas</span>` : '';
+
+            container.innerHTML = `
+                <div class="details-layout">
+                    <div class="details-main">
+                        <h1>${lic.titulo}</h1>
+                        <p class="sub-header">${lic.orgao}</p>
+                        <div class="tabs">
+                            <span id="tab-descricao" class="tab-link active" onclick="showTab('descricao')">Descrição</span>
+                            <span id="tab-documentos" class="tab-link" onclick="showTab('documentos')">Documentos</span>
+                            <span id="tab-requisitos" class="tab-link" onclick="showTab('requisitos')">Requisitos</span>
+                            ${adminTabs}
+                        </div>
+                        <div id="tab-content" class="tab-content"></div>
+                    </div>
+                    <div class="details-sidebar">
+                        <h3>Valor Estimado</h3>
+                        <p style="font-size: 1.5rem; color: var(--primary-accent); margin-bottom: 1.5rem;">${valorFormatado}</p>
+                        <h3>Data de Abertura</h3>
+                        <p style="margin-bottom: 1.5rem;">${dataAbertura}</p>
+                        <h3>Data de Encerramento</h3>
+                        <p style="margin-bottom: 1.5rem;">${dataEncerramento}</p>
+                        ${actionButtonHtml}
+                    </div>
+                </div>
+            `;
+            showTab('descricao');
+
+            if (document.getElementById('participate-btn')) {
+                document.getElementById('participate-btn').addEventListener('click', () => {
+                    document.getElementById('proposal-modal').style.display = 'flex';
+                });
+            }
+        }
+
+        async function showTab(tabName) {
+            document.querySelectorAll('.tab-link').forEach(tab => tab.classList.remove('active'));
+            document.getElementById(`tab-${tabName}`).classList.add('active');
+
+            const contentDiv = document.getElementById('tab-content');
+            const lic = currentLicitacao;
+
+            if (tabName === 'descricao') {
+                contentDiv.innerHTML = `<p>${lic.descricao || 'Nenhuma descrição detalhada fornecida.'}</p>`;
+            } else if (tabName === 'documentos') {
+                contentDiv.innerHTML = '<p>Carregando documentos...</p>';
+                const documentos = await DB.getDocumentsByLicitacaoId(lic.id);
+                const favoritos = Auth.isStandardUser() ? await DB.getFavoritosPorLicitacao(currentUser.id, lic.id) : [];
+
+                if (documentos.length > 0) {
+                    let docsHtml = '<div class="document-list">';
+                    documentos.forEach(doc => {
+                        const isFavorito = favoritos.includes(doc.id);
+                        const starIcon = isFavorito ? 'fas fa-star' : 'far fa-star';
+                        const favoritoBtn = Auth.isStandardUser() ?
+                            `<button class="btn-icon favorite-btn" data-doc-id="${doc.id}" data-favorito="${isFavorito}">
+                                <i class="${starIcon}"></i>
+                            </button>` : '';
+
+                        docsHtml += `
+                            <div class="document-item">
+                                <span><i class="fas fa-file-pdf" style="margin-right: 10px; color: var(--primary-accent);"></i> ${doc.nome_arquivo}</span>
+                                <div style="display: flex; align-items: center; gap: 1rem;">
+                                    ${favoritoBtn}
+                                    <a href="${doc.caminho_arquivo}" download class="download-btn" style="color: var(--text-secondary);"><i class="fas fa-download"></i></a>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    docsHtml += '</div>';
+                    contentDiv.innerHTML = docsHtml;
+
+                    document.querySelectorAll('.favorite-btn').forEach(btn => {
+                        btn.addEventListener('click', handleFavoritoClick);
+                    });
+                } else {
+                    contentDiv.innerHTML = '<p>Nenhum documento associado a esta licitação.</p>';
+                }
+            } else if (tabName === 'requisitos') {
+                const listaTecnicos = lic.requisitos_tecnicos ? `<ul>${lic.requisitos_tecnicos.split(';').map(item => `<li>${item.trim()}</li>`).join('')}</ul>` : '<p>Não especificado.</p>';
+                const listaEconomicos = lic.requisitos_economicos ? `<ul>${lic.requisitos_economicos.split(';').map(item => `<li>${item.trim()}</li>`).join('')}</ul>` : '<p>Não especificado.</p>';
+
+                contentDiv.innerHTML = `
+                    <h3>Qualificação Técnica</h3>
+                    ${listaTecnicos}
+                    <h3 style="margin-top: 2rem;">Qualificação Econômica</h3>
+                    ${listaEconomicos}
+                `;
+            } else if (tabName === 'propostas') {
+                contentDiv.innerHTML = 'Carregando propostas...';
+                const propostas = await DB.getPropostasByLicitacao(lic.id);
+                if (propostas.length > 0) {
+                    let tableHTML = `<table class="proposta-table"><thead><tr><th>Candidato</th><th>Valor</th><th>Status</th><th>Ações</th></tr></thead><tbody>`;
+                    propostas.forEach(p => {
+                        tableHTML += `
+                            <tr>
+                                <td>${p.nome}</td>
+                                <td>${parseFloat(p.valor_proposta).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                                <td>${p.status}</td>
+                                <td class="actions">
+                                    <button class="btn btn-sm" onclick="handleProposal('${p.id}', 'Aprovada', '${p.usuario_id}', '${lic.id}', '${lic.titulo}')">Aprovar</button>
+                                    <button class="btn btn-sm btn-danger" onclick="handleProposal('${p.id}', 'Reprovada', '${p.usuario_id}', '${lic.id}', '${lic.titulo}')">Reprovar</button>
+                                </td>
+                            </tr>
+                        `;
+                    });
+                    tableHTML += `</tbody></table>`;
+                    contentDiv.innerHTML = tableHTML;
+                } else {
+                    contentDiv.innerHTML = '<p>Nenhuma proposta recebida para esta licitação ainda.</p>';
+                }
+            }
+        }
+
+        async function handleProposal(proposalId, newStatus, userId, licitacaoId, licitacaoTitulo) {
+            if (confirm(`Tem certeza que deseja marcar esta proposta como "${newStatus}"?`)) {
+                await DB.updateStatusProposta(proposalId, newStatus);
+
+                const mensagem = `Sua proposta para a licitação "${licitacaoTitulo}" foi atualizada para: ${newStatus}.`;
+                const tipo = newStatus === 'Aprovada' ? 'Sucesso' : 'Aviso';
+                await DB.criarAlerta(userId, licitacaoId, mensagem, tipo);
+
+                displayToast('Status da proposta atualizado e usuário notificado!', 'success');
+                showTab('propostas');
+            }
+        }
+
+        async function handleFavoritoClick(event) {
+            const btn = event.currentTarget;
+            const docId = btn.dataset.docId;
+            const isFavorito = btn.dataset.favorito === 'true';
+            const icon = btn.querySelector('i');
+
+            if (isFavorito) {
+                await DB.desfavoritarDocumento(currentUser.id, docId);
+                btn.dataset.favorito = 'false';
+                icon.className = 'far fa-star';
+            } else {
+                await DB.favoritarDocumento(currentUser.id, docId);
+                btn.dataset.favorito = 'true';
+                icon.className = 'fas fa-star';
+            }
+        }
+
+        function setupModal() {
+            const modal = document.getElementById('proposal-modal');
+            const closeBtn = modal.querySelector('.close-btn');
+            const form = document.getElementById('proposal-form');
+
+            closeBtn.onclick = () => modal.style.display = 'none';
+            window.onclick = (event) => {
+                if (event.target == modal) modal.style.display = 'none';
+            }
+
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+
+                try {
+                    const participacaoResult = await DB.participar(currentLicitacao.id, currentUser.id);
+                    const participacaoId = participacaoResult.insertId;
+
+                    const valor = document.getElementById('valor_proposta').value;
+                    await DB.enviarProposta(participacaoId, valor, null);
+
+                    displayToast('Proposta enviada com sucesso!', 'success');
+                    modal.style.display = 'none';
+                    location.reload();
+                } catch (error) {
+                    alert('Erro ao enviar proposta: ' + error.message);
+                }
+            });
+        }
+    </script>
+</body>
+
+</html>

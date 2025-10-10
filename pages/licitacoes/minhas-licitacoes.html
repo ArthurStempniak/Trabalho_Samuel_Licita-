@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minhas Licitações - LicitHub</title>
+    <link rel="stylesheet" href="../../css/style.css">
+</head>
+<body>
+    <div class="main-layout">
+        <aside class="sidebar"></aside>
+        <header class="header"></header>
+        <main class="main-content">
+            <div class="page-header">
+                <h1>Minhas Participações</h1>
+            </div>
+            <div id="licitacoes-list">
+                </div>
+        </main>
+    </div>
+
+    <script src="../../js/database.js"></script>
+    <script src="../../js/auth.js"></script>
+    <script src="../../js/scripts.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            if (!Auth.isStandardUser()) {
+                alert('Acesso negado.');
+                window.location.href = 'listagem-licitacoes.html';
+                return;
+            }
+            renderCards();
+        });
+
+        async function renderCards() {
+            const listContainer = document.getElementById('licitacoes-list');
+            const currentUser = Auth.getCurrentUser();
+            listContainer.innerHTML = '<p>Carregando suas participações...</p>';
+
+            const licitacoes = await DB.getMinhasParticipacoes(currentUser.id);
+            listContainer.innerHTML = '';
+
+            if (licitacoes.length === 0) {
+                listContainer.innerHTML = '<p>Você ainda não participou de nenhuma licitação.</p>';
+                return;
+            }
+
+            licitacoes.forEach(lic => {
+                const card = document.createElement('div');
+                card.className = 'licitacao-card';
+                
+                const valorFormatado = parseFloat(lic.valor_estimado).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+                card.innerHTML = `
+                    <div class="card-header">
+                        <h2>${lic.titulo}</h2>
+                        <span>Status da Proposta: ${lic.status_proposta || 'Pendente'}</span>
+                    </div>
+                    <div class="card-body">
+                        <p>${lic.orgao}</p>
+                    </div>
+                    <div class="card-footer">
+                        <span class="valor">${valorFormatado}</span>
+                        <a href="detalhes.html?id=${lic.id}">Ver detalhes</a>
+                    </div>
+                `;
+                listContainer.appendChild(card);
+            });
+        }
+    </script>
+</body>
+</html>

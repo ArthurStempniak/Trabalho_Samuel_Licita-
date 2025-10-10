@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Licita+</title>
+    <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+    <div class="main-layout">
+        <aside class="sidebar"></aside>
+        <header class="header"></header>
+        <main class="main-content">
+            <div class="page-header">
+                <h1>Dashboard</h1>
+            </div>
+            
+            <div class="stats-grid">
+                <div class="stat-card success">
+                    <h3>Total de Licitações</h3>
+                    <p id="total-licitacoes">...</p>
+                </div>
+                <div class="stat-card warning">
+                    <h3>Licitações Abertas</h3>
+                    <p id="licitacoes-abertas">...</p>
+                </div>
+                <div class="stat-card secondary">
+                    <h3>Usuários Cadastrados</h3>
+                    <p id="total-usuarios">...</p>
+                </div>
+            </div>
+
+            <div class="card" style="margin-top: 2rem;">
+                <h2>Visão Geral</h2>
+                <p>Bem-vindo ao painel do Licita+. Utilize o menu lateral para navegar entre as funcionalidades do sistema.</p>
+            </div>
+        </main>
+    </div>
+
+    <script src="../js/database.js"></script>
+    <script src="../js/auth.js"></script>
+    <script src="../js/scripts.js"></script>
+    <script>
+        // O listener agora é assíncrono para buscar dados do banco
+        document.addEventListener('DOMContentLoaded', async () => {
+            const licitacoes = await DB.getLicitacoes();
+            const usuarios = await DB.getUsers();
+
+            document.getElementById('total-licitacoes').textContent = licitacoes.length;
+            
+            const abertas = licitacoes.filter(l => l.situacao === 'Aberta').length;
+            document.getElementById('licitacoes-abertas').textContent = abertas;
+            
+            document.getElementById('total-usuarios').textContent = usuarios.length;
+        });
+    </script>
+</body>
+</html>
