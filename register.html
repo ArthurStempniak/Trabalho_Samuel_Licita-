@@ -57,16 +57,37 @@
             errorMessage.style.display = 'none';
 
             try {
-                // Usaremos uma nova função no DB para registrar usuários públicos
                 const result = await DB.registerUser(userData);
-                if(result.insertId) {
+
+                // deve lançar um erro em caso de falha, que será pego pelo 'catch'.
+                if(result && result.insertId) {
                     alert('Cadastro realizado com sucesso! Você será redirecionado para a tela de login.');
                     window.location.href = 'index.html';
                 } else {
-                    throw new Error('Não foi possível realizar o cadastro.');
+                    // Esta condição agora é menos provável de ser atingida, mas é mantida por segurança.
+                    throw new Error('Não foi possível realizar o cadastro (resposta inesperada do servidor).');
                 }
             } catch (error) {
-                errorMessage.textContent = 'Erro ao cadastrar: ' + error.message;
+                let userMessage = 'Ocorreu um erro inesperado.';
+                
+                if (error.message.includes("Duplicate entry")) {
+                    // Verifica qual campo único causou o erro
+                    if (error.message.includes("'usuarios.email'")) {
+                        userMessage = 'Este e-mail já está cadastrado.';
+                    } else if (error.message.includes("'usuarios.cpf'")) {
+                        userMessage = 'Este CPF já está cadastrado.';
+                    } else {
+                        userMessage = 'Dados duplicados (email ou CPF).';
+                    }
+                } else if (error.message.includes("Falha na conexão")) {
+                    // Esta mensagem vem do 'database.js' se o fetch falhar
+                    userMessage = 'Não foi possível conectar ao servidor. Tente novamente mais tarde.';
+                } else {
+                    // Pega outras mensagens, como a do "else" acima ou outras falhas
+                    userMessage = error.message;
+                }
+
+                errorMessage.textContent = 'Erro ao cadastrar: ' + userMessage;
                 errorMessage.style.display = 'block';
                 registerButton.textContent = 'Cadastrar';
                 registerButton.disabled = false;

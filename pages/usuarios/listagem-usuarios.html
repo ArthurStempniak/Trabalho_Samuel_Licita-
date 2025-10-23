@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Usuários - Licita+</title>
     <link rel="stylesheet" href="../../css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
 </head>
 <body>
     <div class="main-layout">
@@ -13,26 +14,92 @@
         <main class="main-content">
             <div class="page-header">
                 <h1>Usuários</h1>
-                <a href="form-usuarios.html" class="btn btn-primary">Novo Usuário</a>
+                <a href="form-usuarios.html" class="btn btn-primary"><i class="fas fa-plus" style="margin-right: 8px;"></i>Novo Usuário</a>
             </div>
 
             <div class="card">
+                <div class="filter-bar">
+                    <input type="search" id="search-input" placeholder="Buscar por nome ou e-mail...">
+                    <select id="profile-filter">
+                        <option value="">Todos os Perfis</option>
+                        <option value="Administrador">Administrador</option>
+                        <option value="Servidor Público">Servidor Público</option>
+                        <option value="Usuário Padrão">Usuário Padrão</option>
+                    </select>
+                    <select id="status-filter">
+                        <option value="">Todos os Status</option>
+                        <option value="ativo" selected>Somente Ativos</option>
+                        <option value="inativo">Somente Inativos</option>
+                    </select>
+                </div>
+
+                <div class="bulk-actions">
+                    <select id="bulk-action-select">
+                        <option value="">Ações em massa...</option>
+                        <option value="ativar">Ativar selecionados</option>
+                        <option value="desativar">Desativar selecionados</option>
+                        <option value="excluir">Excluir selecionados (Permanente)</option>
+                    </select>
+                    <button id="bulk-action-apply" class="btn btn-secondary">Aplicar</button>
+                </div>
+
                 <div class="table-container">
                     <table class="data-table">
                         <thead>
                             <tr>
+                                <th><input type="checkbox" id="select-all-checkbox"></th>
                                 <th>Nome</th>
                                 <th>E-mail</th>
-                                <th>Cargo</th>
+                                <th>Órgão</th>
                                 <th>Perfil</th>
+                                <th>Status</th>
                                 <th>Ações</th>
                             </tr>
                         </thead>
-                        <tbody id="users-table-body"></tbody>
+                        <tbody id="users-table-body">
+                            </tbody>
                     </table>
+                </div>
+
+                <div id="empty-state" class="empty-state" style="display: none;">
+                    <h3>Nenhum usuário encontrado</h3>
+                    <p>Tente ajustar os filtros ou adicione um novo usuário.</p>
                 </div>
             </div>
         </main>
+    </div>
+
+    <div id="confirm-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modal-title">Confirmar Ação</h2>
+            </div>
+            <div class="modal-body">
+                <p id="modal-message">Tem certeza que deseja realizar esta ação?</p>
+            </div>
+            <div class="modal-footer">
+                <button id="modal-cancel-btn" class="btn btn-secondary">Cancelar</button>
+                <button id="modal-confirm-btn" class="btn btn-danger">Confirmar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="password-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="password-modal-title">Senha Redefinida</h2>
+            </div>
+            <div class="modal-body">
+                <p>A senha foi redefinida com sucesso. Por favor, anote a nova senha e informe ao usuário. Esta é a única vez que ela será exibida.</p>
+                <div class="password-reset-box">
+                    <p>Nova Senha:</p>
+                    <strong id="new-password-display"></strong>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="password-modal-close-btn" class="btn btn-primary">Fechar</button>
+            </div>
+        </div>
     </div>
 
     <script src="../../js/database.js"></script>
@@ -40,50 +107,242 @@
     <script src="../../js/scripts.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            if (!Auth.isAdmin()) {
-                alert('Acesso negado. Apenas administradores podem gerenciar usuários.');
-                window.location.href = '../dashboard.html';
+            // Permissão (refatorada para incluir Servidor Público)
+            if (!Auth.isAdm() && !Auth.isPublicServer()) {
+                alert('Acesso negado. Apenas administradores e servidores públicos podem gerenciar usuários.');
+                window.location.href = '../licitacoes/listagem-licitacoes.html';
                 return;
             }
-            
-            renderTable();
 
-            document.getElementById('users-table-body').addEventListener('click', async (event) => {
-                if (event.target.classList.contains('btn-delete')) {
-                    const userId = event.target.getAttribute('data-id');
-                    const currentUser = Auth.getCurrentUser();
-                    if (parseInt(userId) === currentUser.id) {
-                        alert('Você não pode excluir seu próprio usuário.');
-                        return;
+            const currentUser = Auth.getCurrentUser();
+            
+            // Elementos da UI
+            const tableBody = document.getElementById('users-table-body');
+            const emptyState = document.getElementById('empty-state');
+            const searchInput = document.getElementById('search-input');
+            const profileFilter = document.getElementById('profile-filter');
+            const statusFilter = document.getElementById('status-filter');
+            const selectAllCheckbox = document.getElementById('select-all-checkbox');
+            const bulkActionSelect = document.getElementById('bulk-action-select');
+            const bulkActionApplyBtn = document.getElementById('bulk-action-apply');
+            
+            // Elementos do Modal de Confirmação
+            const confirmModal = document.getElementById('confirm-modal');
+            const modalTitle = document.getElementById('modal-title');
+            const modalMessage = document.getElementById('modal-message');
+            const modalConfirmBtn = document.getElementById('modal-confirm-btn');
+            const modalCancelBtn = document.getElementById('modal-cancel-btn');
+
+            // Elementos do Modal de Senha
+            const passwordModal = document.getElementById('password-modal');
+            const passwordModalTitle = document.getElementById('password-modal-title');
+            const newPasswordDisplay = document.getElementById('new-password-display');
+            const passwordModalCloseBtn = document.getElementById('password-modal-close-btn');
+
+            let currentConfirmCallback = null;
+
+            // --- Funções de Renderização e UI ---
+
+            async function renderTable() {
+                const filters = {
+                    searchTerm: searchInput.value,
+                    profile: profileFilter.value,
+                    status: statusFilter.value
+                };
+
+                const users = await DB.getUsers(currentUser, filters);
+                tableBody.innerHTML = '';
+                selectAllCheckbox.checked = false;
+
+                if (users.length === 0) {
+                    emptyState.style.display = 'block';
+                    tableBody.style.display = 'none';
+                    return;
+                }
+
+                emptyState.style.display = 'none';
+                tableBody.style.display = '';
+
+                users.forEach(user => {
+                    const tr = document.createElement('tr');
+                    tr.className = user.status === 'inativo' ? 'user-inativo' : '';
+
+                    const statusBadge = user.status === 'ativo'
+                        ? `<span class="status-badge status-ativo">Ativo</span>`
+                        : `<span class="status-badge status-inativo">Inativo</span>`;
+
+                    let actionButtons = `
+                        <a href="form-usuarios.html?id=${user.id}" class="btn btn-sm btn-secondary" title="Editar"><i class="fas fa-pencil-alt"></i></a>
+                        <button class="btn btn-sm btn-secondary btn-reset-pass" data-id="${user.id}" data-name="${user.nome}" title="Redefinir Senha"><i class="fas fa-key"></i></button>
+                    `;
+
+                    if (user.id === currentUser.id) {
+                        actionButtons += `<button class="btn btn-sm btn-secondary" disabled title="Você não pode alterar seu próprio status"><i class="fas fa-ban"></i></button>`;
+                    } else if (user.status === 'ativo') {
+                        actionButtons += `<button class="btn btn-sm btn-danger btn-toggle-status" data-id="${user.id}" data-status="inativo" title="Desativar"><i class="fas fa-toggle-off"></i></button>`;
+                    } else {
+                        actionButtons += `<button class="btn btn-sm btn-success btn-toggle-status" data-id="${user.id}" data-status="ativo" title="Ativar"><i class="fas fa-toggle-on"></i></button>`;
                     }
-                    if (confirm('Tem certeza que deseja excluir este usuário?')) {
-                        await DB.deleteUser(userId);
-                        displayToast('Usuário excluído com sucesso!', 'success');
-                        renderTable();
-                    }
+
+                    tr.innerHTML = `
+                        <td><input type="checkbox" class="row-checkbox" data-id="${user.id}"></td>
+                        <td>${user.nome}</td>
+                        <td>${user.email}</td>
+                        <td>${user.orgao || 'N/A'}</td>
+                        <td>${user.perfil}</td>
+                        <td>${statusBadge}</td>
+                        <td class="actions">
+                            ${actionButtons}
+                        </td>
+                    `;
+                    tableBody.appendChild(tr);
+                });
+            }
+
+            // --- Funções de Modal ---
+
+            function showConfirmModal(title, message, confirmClass, callback) {
+                modalTitle.textContent = title;
+                modalMessage.textContent = message;
+                modalConfirmBtn.className = `btn ${confirmClass}`; // reseta classes e aplica a nova
+                currentConfirmCallback = callback;
+                confirmModal.style.display = 'flex';
+            }
+
+            function hideConfirmModal() {
+                confirmModal.style.display = 'none';
+                currentConfirmCallback = null;
+            }
+
+            function showPasswordModal(userName, newPassword) {
+                passwordModalTitle.textContent = `Senha Redefinida para ${userName}`;
+                newPasswordDisplay.textContent = newPassword;
+                passwordModal.style.display = 'flex';
+            }
+
+            // --- Event Handlers ---
+
+            // Handlers de Filtro
+            searchInput.addEventListener('input', renderTable);
+            profileFilter.addEventListener('change', renderTable);
+            statusFilter.addEventListener('change', renderTable);
+
+            // Handlers de Ações da Tabela (usando delegação de evento)
+            tableBody.addEventListener('click', async (event) => {
+                const target = event.target.closest('button');
+                if (!target) return;
+
+                const userId = target.dataset.id;
+                
+                // Mudar Status (Ativar/Desativar)
+                if (target.classList.contains('btn-toggle-status')) {
+                    const newStatus = target.dataset.status;
+                    const actionText = newStatus === 'ativo' ? 'Ativar' : 'Desativar';
+                    
+                    showConfirmModal(
+                        `${actionText} Usuário`,
+                        `Tem certeza que deseja ${actionText.toLowerCase()} este usuário? Ele ${newStatus === 'ativo' ? 'poderá' : 'não poderá'} mais acessar o sistema.`,
+                        newStatus === 'ativo' ? 'btn-success' : 'btn-danger',
+                        async () => {
+                            await DB.updateUserStatus(userId, newStatus);
+                            displayToast(`Usuário ${actionText.toLowerCase()} com sucesso!`, 'success');
+                            hideConfirmModal();
+                            renderTable();
+                        }
+                    );
+                }
+
+                // Resetar Senha
+                if (target.classList.contains('btn-reset-pass')) {
+                    const userName = target.dataset.name;
+                    showConfirmModal(
+                        'Redefinir Senha',
+                        `Tem certeza que deseja redefinir a senha de ${userName}? A senha antiga será perdida.`,
+                        'btn-danger',
+                        async () => {
+                            try {
+                                const newPassword = await DB.resetPassword(userId);
+                                hideConfirmModal();
+                                showPasswordModal(userName, newPassword);
+                            } catch (error) {
+                                hideConfirmModal();
+                                displayToast(`Erro ao redefinir senha: ${error.message}`, 'error');
+                            }
+                        }
+                    );
                 }
             });
-        });
 
-        async function renderTable() {
-            const users = await DB.getUsers();
-            const tableBody = document.getElementById('users-table-body');
-            tableBody.innerHTML = '';
-            users.forEach(user => {
-                const tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td>${user.nome}</td>
-                    <td>${user.email}</td>
-                    <td>${user.cargo || 'Não informado'}</td>
-                    <td>${user.perfil}</td>
-                    <td class="actions">
-                        <a href="form-usuarios.html?id=${user.id}" class="btn btn-secondary">Editar</a>
-                        <button class="btn btn-danger btn-delete" data-id="${user.id}">Excluir</button>
-                    </td>
-                `;
-                tableBody.appendChild(tr);
+            // Handlers de Ações em Massa
+            selectAllCheckbox.addEventListener('change', () => {
+                const checkboxes = tableBody.querySelectorAll('.row-checkbox');
+                checkboxes.forEach(cb => cb.checked = selectAllCheckbox.checked);
             });
-        }
+
+            bulkActionApplyBtn.addEventListener('click', () => {
+                const action = bulkActionSelect.value;
+                if (!action) {
+                    displayToast('Por favor, selecione uma ação em massa.', 'error');
+                    return;
+                }
+
+                const selectedCheckboxes = tableBody.querySelectorAll('.row-checkbox:checked');
+                const selectedIds = Array.from(selectedCheckboxes).map(cb => cb.dataset.id);
+                
+                if (selectedIds.length === 0) {
+                    displayToast('Por favor, selecione pelo menos um usuário.', 'error');
+                    return;
+                }
+
+                // Impede admin de se auto-selecionar em ações perigosas
+                if ((action === 'desativar' || action === 'excluir') && selectedIds.includes(String(currentUser.id))) {
+                    displayToast('Você não pode desativar ou excluir seu próprio usuário em massa.', 'error');
+                    return;
+                }
+
+                const actionTextMap = {
+                    'ativar': 'Ativar',
+                    'desativar': 'Desativar',
+                    'excluir': 'Excluir Permanentemente'
+                };
+                const confirmClassMap = {
+                    'ativar': 'btn-success',
+                    'desativar': 'btn-danger',
+                    'excluir': 'btn-danger'
+                };
+
+                showConfirmModal(
+                    `Confirmar Ação em Massa`,
+                    `Tem certeza que deseja "${actionTextMap[action]}" ${selectedIds.length} usuário(s)? ${action === 'excluir' ? 'ESTA AÇÃO É IRREVERSÍVEL.' : ''}`,
+                    confirmClassMap[action],
+                    async () => {
+                        try {
+                            await DB.performBulkAction(action, selectedIds);
+                            displayToast('Ação em massa concluída com sucesso!', 'success');
+                            hideConfirmModal();
+                            renderTable();
+                        } catch (error) {
+                            hideConfirmModal();
+                            displayToast(`Erro ao executar ação: ${error.message}`, 'error');
+                        }
+                    }
+                );
+            });
+
+            // Handlers dos Modais
+            modalCancelBtn.addEventListener('click', hideConfirmModal);
+            modalConfirmBtn.addEventListener('click', () => {
+                if (currentConfirmCallback) {
+                    currentConfirmCallback();
+                }
+            });
+            passwordModalCloseBtn.addEventListener('click', () => {
+                passwordModal.style.display = 'none';
+            });
+
+            // Carregamento Inicial
+            renderTable();
+        });
     </script>
 </body>
 </html>

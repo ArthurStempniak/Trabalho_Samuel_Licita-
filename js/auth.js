@@ -6,7 +6,8 @@ const Auth = {
     SESSION_KEY: 'loggedInUser',
 
     login: async function(email, password) {
-        const sql = 'SELECT * FROM usuarios WHERE email = ? AND senha = ?';
+        // MODIFICAÇÃO: Adicionado "AND status = 'ativo'" para impedir login de usuários inativos
+        const sql = 'SELECT * FROM usuarios WHERE email = ? AND senha = ? AND status = \'ativo\'';
         const params = [email, password];
         const results = await executeQuery(sql, params);
         const user = results[0];

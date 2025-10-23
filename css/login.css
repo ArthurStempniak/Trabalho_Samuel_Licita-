@@ -3,7 +3,7 @@
 :root {
     --background-dark: #121212;
     --surface-color: #1e1e1e;
-    --primary-accent: #d95f02; /* Tom de laranja/ferrugem da paleta */
+    --primary-accent: #d95f02;
     --primary-hover: #b54f02;
     --text-primary: #ffffff;
     --text-secondary: #a0a0a0;
@@ -45,7 +45,7 @@ body {
 }
 
 .logo-container img {
-    height: 60px; /* Ajuste o tamanho do logo se necessário */
+    height: 60px;
 }
 
 .logo-container h1 {
@@ -118,6 +118,6 @@ body {
 
 .error-message {
     margin-top: 1rem;
-    color: #ff8a80; /* Um vermelho claro que combina com o tema */
+    color: #ff8a80;
     display: none;
 }

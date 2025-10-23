@@ -1,39 +1,77 @@
 async function executeQuery(sql, params = []) {
+  let response;
   try {
-    const response = await fetch("http://localhost:3001/query", {
+    // 1. Este 'try' pega APENAS falhas de rede (ex: proxy desligado)
+    response = await fetch("http://localhost:3001/query", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sql, params }),
     });
-    if (!response.ok) {
-      const err = await response.json();
-      throw new Error(err.error);
-    }
-    return await response.json();
-  } catch (error) {
-    console.error("Erro fatal de conexão com a ponte/banco:", error);
+  } catch (networkError) {
+    // 2. Se o fetch FALHAR (ex: "Failed to fetch"), mostre o alerta.
+    console.error("Erro fatal de conexão com a ponte/banco:", networkError);
     alert(
       "Não foi possível conectar ao banco de dados. Verifique se o servidor-ponte (db-proxy.js) está rodando."
     );
-    return [];
+    // Lança um erro específico de conexão para o 'catch' da página
+    throw new Error("Falha de rede ou servidor-ponte indisponível.");
   }
+
+  // 3. Se o fetch funcionou, mas o servidor deu um erro (ex: 500 - Duplicate entry)
+  if (!response.ok) {
+    const err = await response.json();
+    // Lança o erro específico do MySQL (ex: "Duplicate entry...")
+    // Este erro NÃO é pego pelo 'catch' acima.
+    // Ele vai direto para o 'catch' do register.html
+    throw new Error(err.error);
+  }
+
+  // 4. Se tudo deu certo
+  return await response.json();
 }
+
 
 const DB = {
   // --- USUÁRIOS ---
-  async getUsers(currentUser) {
+  async getUsers(currentUser, filters = {}) {
     if (!currentUser) return [];
-    if (Auth.isPublicServer()) {
-      const sql =
-        'SELECT * FROM usuarios WHERE orgao = ? AND perfil = "Administrador" ORDER BY nome';
-      return await executeQuery(sql, [currentUser.orgao]);
+
+    let sql = "";
+    let params = [];
+    const whereClauses = [];
+
+    // Lógica de permissão refatorada.
+    // Admins e Servidores veem TODOS os usuários do seu próprio órgão.
+    if (Auth.isAdm() || Auth.isPublicServer()) {
+      sql = "SELECT * FROM usuarios WHERE orgao = ?";
+      params.push(currentUser.orgao);
+    } else {
+      // Usuários padrão não devem ver a lista de usuários.
+      return [];
     }
-    if (Auth.isAdm()) {
-      const sql =
-        'SELECT * FROM usuarios WHERE orgao = ? AND perfil = "Usuário Padrão" ORDER BY nome';
-      return await executeQuery(sql, [currentUser.orgao]);
+
+    // ADIÇÃO: Lógica de filtro
+    if (filters.searchTerm) {
+      whereClauses.push(`(nome LIKE ? OR email LIKE ?)`);
+      params.push(`%${filters.searchTerm}%`);
+      params.push(`%${filters.searchTerm}%`);
     }
-    return [];
+    if (filters.profile) {
+      whereClauses.push(`perfil = ?`);
+      params.push(filters.profile);
+    }
+    if (filters.status) {
+      whereClauses.push(`status = ?`);
+      params.push(filters.status);
+    }
+
+    if (whereClauses.length > 0) {
+      sql += " AND " + whereClauses.join(" AND ");
+    }
+
+    sql += " ORDER BY nome";
+
+    return await executeQuery(sql, params);
   },
   async getUserById(id) {
     const sql = "SELECT * FROM usuarios WHERE id = ?";
@@ -41,8 +79,9 @@ const DB = {
     return results[0];
   },
   async addUser(user) {
+    // Incluído 'orgao' e 'status'
     const sql =
-      "INSERT INTO usuarios (nome, email, cpf, senha, cargo, orgao, perfil) VALUES (?, ?, ?, ?, ?, ?, ?)";
+      "INSERT INTO usuarios (nome, email, cpf, senha, cargo, orgao, perfil, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
     const params = [
       user.nome,
       user.email,
@@ -51,10 +90,12 @@ const DB = {
       user.cargo,
       user.orgao,
       user.perfil,
+      user.status || 'ativo', // Default para 'ativo'
     ];
     return await executeQuery(sql, params);
   },
   async registerUser(user) {
+    // Nenhuma mudança aqui, o BD cuida do 'orgao' (NULL) e 'status' ('ativo')
     const sql =
       "INSERT INTO usuarios (nome, email, cpf, senha, perfil) VALUES (?, ?, ?, ?, ?)";
     const params = [
@@ -67,8 +108,9 @@ const DB = {
     return await executeQuery(sql, params);
   },
   async updateUser(user) {
+    // Incluído 'orgao' e 'status'
     const sql =
-      "UPDATE usuarios SET nome = ?, email = ?, cpf = ?, cargo = ?, perfil = ?, orgao = ? WHERE id = ?";
+      "UPDATE usuarios SET nome = ?, email = ?, cpf = ?, cargo = ?, perfil = ?, orgao = ?, status = ? WHERE id = ?";
     const params = [
       user.nome,
       user.email,
@@ -76,14 +118,54 @@ const DB = {
       user.cargo,
       user.perfil,
       user.orgao,
+      user.status,
       user.id,
     ];
     return await executeQuery(sql, params);
   },
   async deleteUser(id) {
+    // Esta é uma exclusão permanente (HARD DELETE), usada pelas ações em massa
     const sql = "DELETE FROM usuarios WHERE id = ?";
     return await executeQuery(sql, [id]);
   },
+  // função para Soft Delete (desativar/ativar)
+  async updateUserStatus(id, status) {
+    const sql = "UPDATE usuarios SET status = ? WHERE id = ?";
+    return await executeQuery(sql, [status, id]);
+  },
+  // função para Resetar Senha
+  async resetPassword(id) {
+    // Gera uma senha aleatória simples de 8 caracteres
+    const newPassword = Math.random().toString(36).slice(-8);
+    const sql = "UPDATE usuarios SET senha = ? WHERE id = ?";
+    await executeQuery(sql, [newPassword, id]);
+    return newPassword; // Retorna a nova senha para o admin
+  },
+  // função para Ações em Massa
+  async performBulkAction(action, userIds) {
+    if (!userIds || userIds.length === 0) {
+      throw new Error("Nenhum usuário selecionado.");
+    }
+    const placeholders = userIds.map(() => '?').join(','); // ( ?, ?, ? )
+    let sql = "";
+
+    switch (action) {
+      case "desativar":
+        sql = `UPDATE usuarios SET status = 'inativo' WHERE id IN (${placeholders})`;
+        break;
+      case "ativar":
+        sql = `UPDATE usuarios SET status = 'ativo' WHERE id IN (${placeholders})`;
+        break;
+      case "excluir":
+        sql = `DELETE FROM usuarios WHERE id IN (${placeholders})`;
+        break;
+      default:
+        throw new Error("Ação em massa desconhecida.");
+    }
+
+    return await executeQuery(sql, userIds);
+  },
+
 
   // --- LICITAÇÕES ---
   async getLicitacoes(currentUser, filters = {}) {
